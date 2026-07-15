@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+elasticsearch
+psycopg2-binary
+python-dotenv
+pydantic
+reportlab
+requests
+celery
+redis

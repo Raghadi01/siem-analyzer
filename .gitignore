@@ -1,0 +1,12 @@
+.env
+venv/
+__pycache__/
+*.pyc
+*.pdf
+incident_report_*.md
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+app/main.py.save
+test_analysis.py
+test_report.py

