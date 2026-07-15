@@ -75,5 +75,11 @@ python3 simulate.py
 - Windows Event Log attacks (4625, 4624, 4688, 4698)
 - Cloud attacks (AWS Console login, privilege escalation)
 - Container escape
+
+
+
+## Architecture
+
+![Architecture](screenshots/siem_architecture_diagram.png)
 - Data exfiltration
 - Network reconnaissance and port scanning
