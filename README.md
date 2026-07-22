@@ -96,9 +96,6 @@ python3 simulate.py
 ### Incident detail with AI explanation
 ![Incident](screenshots/incident.png)
 
-### IP investigation timeline
-![Investigate](screenshots/investigate.png)
-
 ### Automatic Discord alert
 ![Alert](screenshots/discord.png)
 
